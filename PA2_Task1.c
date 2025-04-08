@@ -32,7 +32,7 @@ Please specify the group members here
 #include <sys/time.h>
 #include <pthread.h>
 #include <sys/epoll.h>
-#include <sys/types.h>
+#include <sys/types.h> 
 
 #define MAX_EVENTS 64
 #define MESSAGE_SIZE 16
@@ -151,7 +151,7 @@ void *client_thread_func(void *arg)
                 // If we received the full message,
                 if (total_bytes_received == MESSAGE_SIZE) 
                 {
-                    // Increment the count of received packets
+                    // Task 1: Increment the count of received packets
                     rx_cnt++;
 
                     // Calculate the RDT using gettimeofday difference between time sent and time received in microseconds
@@ -160,13 +160,13 @@ void *client_thread_func(void *arg)
                     client_thread_data->total_rtt += round_trip_time;
                     client_thread_data->total_messages++;
 
-                    // Report that the message
+                    // Report that the message was received successfully
                     printf("Client thread received message %d, RTT = %lld us\n", request_index + 1, round_trip_time);
                 }
                 // If the full message was not received,
                 else 
                 {
-                    // Increment the lost packet count
+                    // Task 1: Increment the lost packet count
                     lost_pkt_cnt++;
                     printf("Packet lost for message %d\n", request_index + 1);
                 }
@@ -174,17 +174,21 @@ void *client_thread_func(void *arg)
         }
         else
         {
+            // Task 1: If epoll wait timed out, then the packet was lost, so report this and increment the lost packet count
             printf("Timeout: No response from the server for message %d\n", request_index + 1);
-            lost_pkt_cnt++;  // Increment the lost packet count if there was a timeout
+            lost_pkt_cnt++;  
         }
     }
     
-    // Task 1: Calculate the number of lost packets for the thread
+    // Task 1: Calculate the number of lost packets for the thread, and report it
     lost_pkt_cnt = tx_cnt - rx_cnt;
     printf("Client thread packet loss: %d packets lost (out of %d sent)\n", lost_pkt_cnt, tx_cnt);
 
+    // Now that all requests from client to server have been made, we can calculate request rate 
+    // If at least one message was sent, calculate request rate
     if (client_thread_data->total_messages > 0) 
     {
+        // Request rate = number of messages divided by total RTT in seconds (or 0 if total_RTT = 0)
         if (client_thread_data->total_rtt > 0) 
         {
             client_thread_data->request_rate = (double)client_thread_data->total_messages / (client_thread_data->total_rtt / 1000000.0);
@@ -196,9 +200,11 @@ void *client_thread_func(void *arg)
     } 
     else 
     {
+        // If no messages were send, the request rate is 0
         client_thread_data->request_rate = 0;
     }
 
+    // All messages have been sent, so we can close the socket and report client thread request rate
     close(client_thread_data->socket_fd);
     close(client_thread_data->epoll_fd);
     printf("Client thread finished with request rate = %.2f messages/s\n", client_thread_data->request_rate);
