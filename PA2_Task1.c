@@ -33,7 +33,6 @@ Please specify the group members here
 #include <pthread.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
-//FIXME? #include <fcntl.h> 
 
 #define MAX_EVENTS 64
 #define MESSAGE_SIZE 16
