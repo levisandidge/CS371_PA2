@@ -16,7 +16,7 @@
 # SPDX-License-Identifier: Apache-2.0
 */
 
-/* 
+/*
 Please specify the group members here
 # Student #1: Brett Carson
 # Student #2: Levi Sandidge
@@ -57,11 +57,11 @@ typedef struct {
 /*
  * This function runs in a separate client thread to handle communication with the server
  */
-void *client_thread_func(void *arg) 
+void *client_thread_func(void *arg)
 {
     client_thread_data_t *client_thread_data = (client_thread_data_t *)arg;
     struct epoll_event epoll_event_to_register, triggered_events[MAX_EVENTS];
-    char message_to_send[MESSAGE_SIZE] = "ABCDEFGHIJKLMNOP"; 
+    char message_to_send[MESSAGE_SIZE] = "ABCDEFGHIJKLMNOP";
     char received_message[MESSAGE_SIZE];
     struct timeval request_start_time, request_end_time;
 
@@ -72,7 +72,7 @@ void *client_thread_func(void *arg)
     epoll_event_to_register.data.fd = client_thread_data->socket_fd;
 
     // If epoll control fails, report error
-    if (epoll_ctl(client_thread_data->epoll_fd, EPOLL_CTL_ADD, client_thread_data->socket_fd, &epoll_event_to_register) == -1) 
+    if (epoll_ctl(client_thread_data->epoll_fd, EPOLL_CTL_ADD, client_thread_data->socket_fd, &epoll_event_to_register) == -1)
     {
         perror("epoll_ctl failed");
         exit(EXIT_FAILURE);
@@ -82,12 +82,12 @@ void *client_thread_func(void *arg)
     printf("Client thread started to send %d requests...\n", num_requests);
 
     // For each request from the client to the server,
-    for (int request_index = 0; request_index < num_requests; request_index++) 
+    for (int request_index = 0; request_index < num_requests; request_index++)
     {
         // Record timestamp of start of request so we can calculate RTT later, then send the message (report error if send fails)
         gettimeofday(&request_start_time, NULL);
 
-        if (send(client_thread_data->socket_fd, message_to_send, MESSAGE_SIZE, 0) == -1) 
+        if (send(client_thread_data->socket_fd, message_to_send, MESSAGE_SIZE, 0) == -1)
         {
             perror("message send failed");
             exit(EXIT_FAILURE);
@@ -98,29 +98,29 @@ void *client_thread_func(void *arg)
 
         // Wait for a response from the server, and if the response is from the correct socket,
         int number_of_triggered_events = epoll_wait(client_thread_data->epoll_fd, triggered_events, MAX_EVENTS, -1);
-        if (number_of_triggered_events > 0 && triggered_events[0].data.fd == client_thread_data->socket_fd) 
+        if (number_of_triggered_events > 0 && triggered_events[0].data.fd == client_thread_data->socket_fd)
         {
             // While there are still more bytes to receive from the server (16 total)
             int total_bytes_received = 0;
-            while (total_bytes_received < MESSAGE_SIZE) 
+            while (total_bytes_received < MESSAGE_SIZE)
             {
                 // Receive data using recv function with parameters of the corresponding socket, a pointer to
                 // the index in the buffer where data will be stored, the max number of bytes, and 0 (no special options)
                 int bytes_received_from_server = recv(client_thread_data->socket_fd, received_message + total_bytes_received, MESSAGE_SIZE - total_bytes_received, 0);
 
                 // If there is still data to receive, append to received message
-                if (bytes_received_from_server > 0) 
+                if (bytes_received_from_server > 0)
                 {
                     total_bytes_received += bytes_received_from_server;
-                } 
+                }
                 // If no data was received, connection with the server must have failed
-                else if (bytes_received_from_server == 0) 
+                else if (bytes_received_from_server == 0)
                 {
                     printf("Connection with the server failed.\n");
                     break;
-                } 
+                }
                 // Otherwise, the call to recv function failed
-                else 
+                else
                 {
                     perror("recv function failed");
                     break;
@@ -143,22 +143,22 @@ void *client_thread_func(void *arg)
     }
 
 
-    // Now that all requests from client to server have been made, we can calculate request rate 
+    // Now that all requests from client to server have been made, we can calculate request rate
     // If at least one message was sent, calculate request rate
-    if (client_thread_data->total_messages > 0) 
+    if (client_thread_data->total_messages > 0)
     {
         // Request rate = number of messages divided by total RTT in seconds (or 0 if total_RTT = 0)
-        if (client_thread_data->total_rtt > 0) 
+        if (client_thread_data->total_rtt > 0)
         {
             client_thread_data->request_rate = (double)client_thread_data->total_messages / (client_thread_data->total_rtt / 1000000.0);
-        } 
-        else 
+        }
+        else
         {
             client_thread_data->request_rate = 0.0;
         }
-        
-    } 
-    else 
+
+    }
+    else
     {
         // If no messages were sent, the request rate is 0
         client_thread_data->request_rate = 0;
@@ -176,7 +176,7 @@ void *client_thread_func(void *arg)
  * This function orchestrates multiple client threads to send requests to a server,
  * collect performance data of each threads, and compute aggregated metrics of all threads.
  */
-void run_client() 
+void run_client()
 {
     // Set up the client threads that will send requests to the server
     pthread_t threads[num_client_threads];
@@ -193,13 +193,13 @@ void run_client()
     printf("Client connecting to server %s:%d...\n", server_ip, server_port);
 
     // For each thread,
-    for (int i = 0; i < num_client_threads; i++) 
+    for (int i = 0; i < num_client_threads; i++)
     {
         // Establish TCP connection with the server and register socket with epoll
-        thread_data[i].socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+        thread_data[i].socket_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
         // If socket creation fails, report issue
-        if (thread_data[i].socket_fd == -1) 
+        if (thread_data[i].socket_fd == -1)
         {
             perror("socket creation failed");
             exit(EXIT_FAILURE);
@@ -209,7 +209,7 @@ void run_client()
         thread_data[i].epoll_fd = epoll_create1(0);
 
         // If the epoll instance is not created properly, report the error
-        if (thread_data[i].epoll_fd == -1) 
+        if (thread_data[i].epoll_fd == -1)
         {
             perror("epoll instance failed");
             exit(EXIT_FAILURE);
@@ -221,7 +221,7 @@ void run_client()
         thread_data[i].request_rate = 0.0;
 
         // Establish a connection between the client's socket and the server using server address. If connection failed, report issue
-        if (connect(thread_data[i].socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) 
+        if (connect(thread_data[i].socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)
         {
             perror("connection failed");
             exit(EXIT_FAILURE);
@@ -237,7 +237,7 @@ void run_client()
     float total_request_rate = 0.0;
 
     // For each client thread,
-    for (int i = 0; i < num_client_threads; i++) 
+    for (int i = 0; i < num_client_threads; i++)
     {
         // Wait for all threads to finish so we can calculate data across all threads
         pthread_join(threads[i], NULL);
@@ -250,11 +250,11 @@ void run_client()
 
     // Report all results for the client
     printf("Client completed. Aggregated results:\n");
-    
+
     // Print request rate(), RTT, and the validation check for all threads
-    for (int m = 0; m < num_client_threads; m++) 
+    for (int m = 0; m < num_client_threads; m++)
     {
-        // Calculate the round trip time for an individual 
+        // Calculate the round trip time for an individual
         double Tj = (double)thread_data[m].total_rtt / thread_data[m].total_messages;
 
         // Calculate the request rate
@@ -272,7 +272,7 @@ void run_client()
 
     // If message(s) were sent, calculate the average RTT and report it
     long long average_rtt = 0;
-    if (total_messages > 0) 
+    if (total_messages > 0)
     {
         // Average round trip time is determined by the total rtt divided by number of messages sent
         average_rtt = total_rtt / total_messages;
@@ -286,7 +286,7 @@ void run_client()
 /*
  * Server function to handle client connections and echo messages.
  */
-void run_server() 
+void run_server()
 {
     // Run the server, and report server-specific details
     printf("Server started on %s:%d\n", server_ip, server_port);
@@ -299,7 +299,7 @@ void run_server()
     int listening_socket_file_descriptor, epoll_instance_file_descriptor;
 
     // Create TCP socket for IPv4 communication, which will correspond to listening socket fd
-    listening_socket_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+    listening_socket_file_descriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
     // Create epoll instance to monitor the created file descriptors
     epoll_instance_file_descriptor = epoll_create1(0);
@@ -313,7 +313,7 @@ void run_server()
     server_address.sin_port = htons(server_port);
 
     // Bind the listening socket to corresponding server address, then listen for connections (if binding fails, report error)
-    if (bind(listening_socket_file_descriptor, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) 
+    if (bind(listening_socket_file_descriptor, (struct sockaddr*)&server_address, sizeof(server_address)) == -1)
     {
         perror("binding failed");
         exit(EXIT_FAILURE);
@@ -333,22 +333,22 @@ void run_server()
     printf("Server listening for connections...\n");
 
     // Infinite loop to handle events
-    while (1) 
+    while (1)
     {
         // Use epoll to wait for upcoming event
         struct epoll_event triggered_events[MAX_EVENTS];
         int n = epoll_wait(epoll_instance_file_descriptor, triggered_events, MAX_EVENTS, -1);
 
         // For each event returned by epoll_wait
-        for (int i = 0; i < n; i++) 
+        for (int i = 0; i < n; i++)
         {
             // If the event is on the listening socket
-            if (triggered_events[i].data.fd == listening_socket_file_descriptor) 
+            if (triggered_events[i].data.fd == listening_socket_file_descriptor)
             {
                 // Determine length of client, and accept connection (if fail to accept, report error)
                 socklen_t client_address_length = sizeof(client_address);
                 int client_connection_file_descriptor = accept(listening_socket_file_descriptor, (struct sockaddr*)&client_address, &client_address_length);
-                if (client_connection_file_descriptor == -1) 
+                if (client_connection_file_descriptor == -1)
                 {
                     perror("failed to accept connection");
                     continue;
@@ -357,25 +357,25 @@ void run_server()
                 // Wait for data from client using client_connection_file_descriptor
                 struct epoll_event client_connection_event;
                 client_connection_event.events = EPOLLIN;
-                client_connection_event.data.fd = client_connection_file_descriptor;
+                client_connection_event.data.fd = listening_socket_file_descriptor;
 
                 // Register client file descriptor with epoll instance (if epoll control fails, report error)
-                if (epoll_ctl(epoll_instance_file_descriptor, EPOLL_CTL_ADD, client_connection_file_descriptor, &client_connection_event) == -1) 
+                if (epoll_ctl(epoll_instance_file_descriptor, EPOLL_CTL_ADD, listening_socket_file_descriptor, &client_connection_event) == -1)
                 {
                     perror("epoll control failed");
-                    close(client_connection_file_descriptor);
+                    close(listening_socket_file_descriptor);
                     continue;
                 }
 
                 // Report new client connection
                 printf("Server accepted new client connection.\n");
             }
-            else 
+            else
             {
                 // Handle incoming data from client, echo received data back to the client
                 char received_data_buffer[MESSAGE_SIZE];
                 int ret = recv(triggered_events[i].data.fd, received_data_buffer, MESSAGE_SIZE, 0);
-                if (ret > 0) 
+                if (ret > 0)
                 {
                     // Echo data received from client back to client
                     send(triggered_events[i].data.fd, received_data_buffer, ret, 0);
@@ -383,7 +383,7 @@ void run_server()
                     // Report the echoed message
                     printf("Server echoed message: %.16s\n", received_data_buffer);
                 }
-                else 
+                else
                 {
                     // If client closed connection, close corresponding socket and remove from epoll
                     close(triggered_events[i].data.fd);
@@ -395,16 +395,16 @@ void run_server()
 }
 
 
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
-    if (argc > 1 && strcmp(argv[1], "server") == 0) 
+    if (argc > 1 && strcmp(argv[1], "server") == 0)
     {
         if (argc > 2) server_ip = argv[2];
         if (argc > 3) server_port = atoi(argv[3]);
 
         run_server();
-    } 
-    else if (argc > 1 && strcmp(argv[1], "client") == 0) 
+    }
+    else if (argc > 1 && strcmp(argv[1], "client") == 0)
     {
         if (argc > 2) server_ip = argv[2];
         if (argc > 3) server_port = atoi(argv[3]);
@@ -412,8 +412,8 @@ int main(int argc, char *argv[])
         if (argc > 5) num_requests = atoi(argv[5]);
 
         run_client();
-    } 
-    else 
+    }
+    else
     {
         printf("Usage: %s <server|client> [server_ip server_port num_client_threads num_requests]\n", argv[0]);
     }
