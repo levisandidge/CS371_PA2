@@ -42,9 +42,7 @@ int server_port = 12345;
 int num_client_threads = DEFAULT_CLIENT_THREADS;
 int num_requests = 1000000;
 
-/*
- * This structure is used to store per-thread data in the client
- */
+// Structure to store data for client threads
 typedef struct {
     int epoll_fd;
     int socket_fd;
@@ -57,6 +55,7 @@ typedef struct {
     struct sockaddr_in server_addr;
 } client_thread_data_t;
 
+
 /*
  * This function runs in a separate client thread to handle communication with the server
  */
@@ -66,7 +65,7 @@ void *client_thread_func(void *arg)
     client_thread_data_t *client_thread_data = (client_thread_data_t *)arg;
     char message_to_send[MESSAGE_SIZE] = "ABCDEFGHIJKLMNOP"; 
     char received_message[MESSAGE_SIZE];
-    struct timeval request_start_time, request_end_time;
+    struct timeval request_time_start, request_time_end;
 
     // Task 1: Need server address structure for UDP
     struct sockaddr_in server_addr;
@@ -91,9 +90,9 @@ void *client_thread_func(void *arg)
     for (int request_index = 0; request_index < num_requests; request_index++) 
     {
         // Record timestamp of start of request so we can calculate RTT later, then send the message (report error if send fails)
-        gettimeofday(&request_start_time, NULL);
+        gettimeofday(&request_time_start, NULL);
 
-        // Task 1: Use sendto instead of send
+        // Task 1: Use sendto instead of send for sending the message
         if (sendto(client_thread_data->socket_fd, message_to_send, MESSAGE_SIZE, 0, (struct sockaddr *)&server_addr, addr_len) == -1) 
         {
             perror("message send failed");
@@ -115,14 +114,14 @@ void *client_thread_func(void *arg)
 
         // Task 1: Create a struct to manage the timeout time to determine when packet loss has occurred. Select() will wait up to 1 second
         struct timeval timeout;
-        timeout.tv_sec = 1;  // wait up to 1 second
+        timeout.tv_sec = 1;  
         timeout.tv_usec = 0;
 
         // Task 1: Monitor the socket for readability, blocking until either data is available to read, or timeout occurs after one second
-        int activity = select(client_thread_data->socket_fd + 1, &read_fds, NULL, NULL, &timeout);
+        int num_ready_fds = select(client_thread_data->socket_fd + 1, &read_fds, NULL, NULL, &timeout);
 
         // Task 1: If select() returns that data is available to read, and the socket is in the set of file descriptors to monitor,
-        if (activity > 0 && FD_ISSET(client_thread_data->socket_fd, &read_fds)) 
+        if (num_ready_fds > 0 && FD_ISSET(client_thread_data->socket_fd, &read_fds)) 
         {
             // While there are still more bytes to receive from the server (16 total)
             int total_bytes_received = 0;
@@ -156,9 +155,9 @@ void *client_thread_func(void *arg)
                     // Task 1: Increment the count of received packets
                     rx_cnt++;
 
-                    // Calculate the RDT using gettimeofday difference between time sent and time received in microseconds
-                    gettimeofday(&request_end_time, NULL);
-                    long long round_trip_time = (request_end_time.tv_sec - request_start_time.tv_sec) * 1000000LL + (request_end_time.tv_usec - request_start_time.tv_usec);
+                    // Calculate the RTT using gettimeofday difference between time sent and time received in microseconds
+                    gettimeofday(&request_time_end, NULL);
+                    long long round_trip_time = (request_time_end.tv_sec - request_time_start.tv_sec) * 1000000LL + (request_time_end.tv_usec - request_time_start.tv_usec);
                     client_thread_data->total_rtt += round_trip_time;
                     client_thread_data->total_messages++;
 
@@ -183,23 +182,15 @@ void *client_thread_func(void *arg)
     }
 
     // Now that all requests from client to server have been made, we can calculate request rate 
-    // If at least one message was sent, calculate request rate
-    if (client_thread_data->total_messages > 0) 
+    // If at least one message was sent, calculate request rate as number of messages divided by total RTT in seconds
+    if (client_thread_data->total_messages > 0 && client_thread_data->total_rtt > 0) 
     {
-        // Request rate = number of messages divided by total RTT in seconds (or 0 if total_RTT = 0)
-        if (client_thread_data->total_rtt > 0) 
-        {
-            client_thread_data->request_rate = (double)client_thread_data->total_messages / (client_thread_data->total_rtt / 1000000.0);
-        } 
-        else 
-        {
-            client_thread_data->request_rate = 0.0;
-        }
+        client_thread_data->request_rate = (double)client_thread_data->total_messages / (client_thread_data->total_rtt / 1000000.0);
     } 
     else 
     {
-        // If no messages were send, the request rate is 0
-        client_thread_data->request_rate = 0;
+        // If no messages were sent, report request rate as 0
+        client_thread_data->request_rate = 0.0;
     }
 
     // All messages have been sent, so we can close the socket and report client thread request rate
@@ -248,7 +239,12 @@ void run_client()
         thread_data[i].request_rate = 0.0;
 
         // Create a new thread to pass thread-specific data
-        pthread_create(&threads[i], NULL, client_thread_func, &thread_data[i]);
+        if (pthread_create(&threads[i], NULL, client_thread_func, &thread_data[i]) != 0) 
+        {
+            // If thread creation failed, report error
+            perror("pthread_create failed");
+            exit(EXIT_FAILURE);
+        }
     }
 
     // Initialize data to be 0 for the total RTT, messages, and request rate across all threads
@@ -363,7 +359,7 @@ void run_server()
             sendto(server_socket_fd, buffer, bytes_received, 0, (struct sockaddr *)&client_address, client_len);
 
             // Report the message that the server echoes back
-            printf("Server echoed message: %.16s\n", buffer);
+            //Fixme? printf("Server echoed message: %.16s\n", buffer);
         } 
         else 
         {
@@ -371,6 +367,8 @@ void run_server()
             perror("recvfrom failed or no data received");
         }
     }
+    // Close the server socket file descriptor when server is shut down
+    close(server_socket_fd);
 }
 
 
